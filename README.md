@@ -1,8 +1,10 @@
 # MUXConv
 Code accompanying the paper. All codes assume running from root directory. 
-[MUXConv: Information Multiplexing in Convolutional Neural Networks](http://hal.cse.msu.edu/papers/muxnet/)
-
-Zhichao Lu, Kalyanmoy Deb, and Vishnu Boddeti
+> [MUXConv: Information Multiplexing in Convolutional Neural Networks](http://hal.cse.msu.edu/papers/muxnet/)
+>
+> Zhichao Lu, Kalyanmoy Deb, and Vishnu Boddeti
+>
+> CVPR 2020
 
 
 ## Requirements
