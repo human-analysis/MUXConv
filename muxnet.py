@@ -1,18 +1,6 @@
-""" Generic EfficientNets
-
-A generic class with building blocks to support a variety of models with efficient architectures:
-* EfficientNet (B0-B7)
-* MixNet (Small, Medium, and Large)
-* MnasNet B1, A1 (SE), Small
-* MobileNet V1, V2, and V3
-* FBNet-C (TODO A & B)
-* ChamNet (TODO still guessing at architecture definition)
-* Single-Path NAS Pixel1
-* And likely more...
-
-TODO not all combinations and variations have been tested. Currently working on training hyper-params...
-
-Hacked together by Ross Wightman
+"""
+based on EfficientNet implementation from
+https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/efficientnet.py
 """
 import re
 import math
@@ -48,7 +36,7 @@ def _cfg(url='', **kwargs):
 
 default_cfgs = {
     'muxnet_m': _cfg(
-        url='https://github.com/mikelzc1990/imagenet-pretrained/blob/master/msunet_s_224.pth'),
+        url=''),
 }
 
 
@@ -113,7 +101,7 @@ def _decode_block_str(block_str, depth_multiplier=1.0):
     is assumed to indicate the block type.
 
     leading string - block type (
-      ir = InvertedResidual, ds = DepthwiseSep, dsa = DeptwhiseSep with pw act, cn = ConvBnAct)
+      ir = InvertedResidual, ds = DepthwiseSep, dsa = DeptwhiseSep with pw act)
     r - number of repeat blocks,
     k - kernel size,
     s - strides (1-9),
@@ -210,27 +198,6 @@ def _decode_block_str(block_str, depth_multiplier=1.0):
             act_fn=act_fn,
             pw_act=block_type == 'dsa',
             noskip=block_type == 'dsa' or noskip,
-        )
-    elif block_type == 'er':
-        block_args = dict(
-            block_type=block_type,
-            exp_kernel_size=_parse_ksize(options['k']),
-            pw_kernel_size=pw_kernel_size,
-            out_chs=int(options['c']),
-            exp_ratio=float(options['e']),
-            fake_in_chs=fake_in_chs,
-            se_ratio=float(options['se']) if 'se' in options else None,
-            stride=int(options['s']),
-            act_fn=act_fn,
-            noskip=noskip,
-        )
-    elif block_type == 'cn':
-        block_args = dict(
-            block_type=block_type,
-            kernel_size=int(options['k']),
-            out_chs=int(options['c']),
-            stride=int(options['s']),
-            act_fn=act_fn,
         )
     else:
         assert False, 'Unknown block type (%s)' % block_type
@@ -390,24 +357,13 @@ class _BlockBuilder:
             ba['se_gate_fn'] = self.se_gate_fn
             ba['se_reduce_mid'] = self.se_reduce_mid
             if self.verbose:
-                logging.info('  SplitInvertedResidual {}, Args: {}'.format(self.block_idx, str(ba)))
-            block = SplitInvertedResidual(**ba)
+                logging.info('  MuxInvertedResidual {}, Args: {}'.format(self.block_idx, str(ba)))
+            block = MuxInvertedResidual(**ba)
         elif bt == 'ds' or bt == 'dsa':
             ba['drop_connect_rate'] = self.drop_connect_rate * self.block_idx / self.block_count
             if self.verbose:
                 logging.info('  DepthwiseSeparable {}, Args: {}'.format(self.block_idx, str(ba)))
             block = DepthwiseSeparableConv(**ba)
-        elif bt == 'er':
-            ba['drop_connect_rate'] = self.drop_connect_rate * self.block_idx / self.block_count
-            ba['se_gate_fn'] = self.se_gate_fn
-            ba['se_reduce_mid'] = self.se_reduce_mid
-            if self.verbose:
-                logging.info('  EdgeResidual {}, Args: {}'.format(self.block_idx, str(ba)))
-            block = EdgeResidual(**ba)
-        elif bt == 'cn':
-            if self.verbose:
-                logging.info('  ConvBnAct {}, Args: {}'.format(self.block_idx, str(ba)))
-            block = ConvBnAct(**ba)
         else:
             assert False, 'Uknkown block type (%s) while building model.' % bt
         self.in_chs = ba['out_chs']  # update in_chs for arg of next block
@@ -550,74 +506,6 @@ class SqueezeExcite(nn.Module):
         return x
 
 
-class ConvBnAct(nn.Module):
-    def __init__(self, in_chs, out_chs, kernel_size,
-                 stride=1, pad_type='', act_fn=F.relu, bn_args=_BN_ARGS_PT):
-        super(ConvBnAct, self).__init__()
-        assert stride in [1, 2]
-        self.act_fn = act_fn
-        self.conv = select_conv2d(in_chs, out_chs, kernel_size, stride=stride, padding=pad_type)
-        self.bn1 = nn.BatchNorm2d(out_chs, **bn_args)
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = self.bn1(x)
-        x = self.act_fn(x, inplace=True)
-        return x
-
-
-class EdgeResidual(nn.Module):
-    """ Residual block with expansion convolution followed by pointwise-linear w/ stride"""
-
-    def __init__(self, in_chs, out_chs, exp_kernel_size=3, exp_ratio=1.0, fake_in_chs=0,
-                 stride=1, pad_type='', act_fn=F.relu, noskip=False, pw_kernel_size=1,
-                 se_ratio=0., se_reduce_mid=False, se_gate_fn=sigmoid,
-                 bn_args=_BN_ARGS_PT, drop_connect_rate=0.):
-        super(EdgeResidual, self).__init__()
-        mid_chs = int(fake_in_chs * exp_ratio) if fake_in_chs > 0 else int(in_chs * exp_ratio)
-        self.has_se = se_ratio is not None and se_ratio > 0.
-        self.has_residual = (in_chs == out_chs and stride == 1) and not noskip
-        self.act_fn = act_fn
-        self.drop_connect_rate = drop_connect_rate
-
-        # Expansion convolution
-        self.conv_exp = select_conv2d(in_chs, mid_chs, exp_kernel_size, padding=pad_type)
-        self.bn1 = nn.BatchNorm2d(mid_chs, **bn_args)
-
-        # Squeeze-and-excitation
-        if self.has_se:
-            se_base_chs = mid_chs if se_reduce_mid else in_chs
-            self.se = SqueezeExcite(
-                mid_chs, reduce_chs=max(1, int(se_base_chs * se_ratio)), act_fn=act_fn, gate_fn=se_gate_fn)
-
-        # Point-wise linear projection
-        self.conv_pwl = select_conv2d(mid_chs, out_chs, pw_kernel_size, stride=stride, padding=pad_type)
-        self.bn2 = nn.BatchNorm2d(out_chs, **bn_args)
-
-    def forward(self, x):
-        residual = x
-
-        # Expansion convolution
-        x = self.conv_exp(x)
-        x = self.bn1(x)
-        x = self.act_fn(x, inplace=True)
-
-        # Squeeze-and-excitation
-        if self.has_se:
-            x = self.se(x)
-
-        # Point-wise linear projection
-        x = self.conv_pwl(x)
-        x = self.bn2(x)
-
-        if self.has_residual:
-            if self.drop_connect_rate > 0.:
-                x = drop_connect(x, self.training, self.drop_connect_rate)
-            x += residual
-
-        return x
-
-
 class DepthwiseSeparableConv(nn.Module):
     """ DepthwiseSeparable block
     Used for DS convs in MobileNet-V1 and in the place of IR blocks with an expansion
@@ -744,8 +632,8 @@ class InvertedResidual(nn.Module):
         return x
 
 
-class SplitInvertedResidual(nn.Module):
-    """ Split Channel Inverted residual block w/ optional SE"""
+class MuxInvertedResidual(nn.Module):
+    """ Inverted residual block w/ Channel Shuffling w/ optional SE"""
 
     def __init__(self, in_chs, out_chs, dw_kernel_size=3,
                  stride=1, pad_type='', act_fn=F.relu, noskip=False,
@@ -754,7 +642,7 @@ class SplitInvertedResidual(nn.Module):
                  shuffle_type=None, bn_args=_BN_ARGS_PT, drop_connect_rate=0.,
                  split_ratio=0.75, shuffle_groups=2, dw_group_factor=1,
                  scales=0):
-        super(SplitInvertedResidual, self).__init__()
+        super(MuxInvertedResidual, self).__init__()
 
         assert in_chs == out_chs, "should only be used when input channels == output channels"
         assert stride < 2, "should NOT be used to down-sample"
@@ -965,7 +853,7 @@ def _gen_muxnet_m(channel_multiplier=1.0, depth_multiplier=1.0, num_classes=1000
 
 
 def _gen_muxnet_l(channel_multiplier=1.0, depth_multiplier=1.0, num_classes=1000, **kwargs):
-    """Creates an MSUNet model.
+    """Creates an MUXNet-l model.
 
     Args:
       channel_multiplier: multiplier to number of channels per layer
@@ -1017,7 +905,7 @@ def _gen_muxnet_l(channel_multiplier=1.0, depth_multiplier=1.0, num_classes=1000
 
 @register_model
 def muxnet_m(pretrained=False, num_classes=1000, in_chans=3, **kwargs):
-    """ MSUNet small """
+    """ MUXNet-m """
     default_cfg = default_cfgs['muxnet_m']
     # NOTE for train, drop_rate should be 0.2
     kwargs['drop_connect_rate'] = 0.1  # set when training, TODO add as cmd arg
@@ -1033,7 +921,7 @@ def muxnet_m(pretrained=False, num_classes=1000, in_chans=3, **kwargs):
 
 @register_model
 def muxnet_l(pretrained=False, num_classes=1000, in_chans=3, **kwargs):
-    """ MSUNet small """
+    """ MUXNet-l """
     default_cfg = default_cfgs['msunet_s']
     # NOTE for train, drop_rate should be 0.2
     kwargs['drop_connect_rate'] = 0.15  # set when training, TODO add as cmd arg
@@ -1058,7 +946,7 @@ if __name__ == '__main__':
     from torchprofile import profile_macs
     warnings.filterwarnings("ignore")
 
-    model = muxnet_m(pretrained=True)
+    model = muxnet_m(pretrained=False)
     inputs = torch.randn(1, 3, 224, 224)
 
     params = sum(p.numel() for p in model.parameters() if p.requires_grad)
