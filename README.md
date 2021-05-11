@@ -1,6 +1,6 @@
 # MUXConv
 Code accompanying the paper. 
-<img align="right" width="400" height="201" src="http://hal.cse.msu.edu/assets/images/papers/2020-cvpr-muxnet.png">
+<img align="right" width="400" height="201" src="http://zhichaolu.com/assets/muxconv/images/2020-cvpr-muxnet.webp">
 > [MUXConv: Information Multiplexing in Convolutional Neural Networks](http://hal.cse.msu.edu/papers/muxnet/)
 >
 > [Zhichao Lu](https://www.zhichaolu.com), [Kalyanmoy Deb](https://www.egr.msu.edu/~kdeb/), and [Vishnu Boddeti](http://hal.cse.msu.edu/team/vishnu-boddeti/)
