@@ -4,6 +4,8 @@ import math
 import logging
 import argparse
 
+import PIL
+
 import torch
 import torch.nn as nn
 import torchvision.utils
@@ -118,7 +120,7 @@ def _dataset(data, dataset, valid_transform):
 
 def _data_transforms(args):
 
-    interpolation = 3
+    interpolation = PIL.Image.BICUBIC
     if 'cifar' in args.dataset:
         norm_mean = [0.49139968, 0.48215827, 0.44653124]
         norm_std = [0.24703233, 0.24348505, 0.26158768]

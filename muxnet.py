@@ -37,6 +37,8 @@ def _cfg(url='', **kwargs):
 default_cfgs = {
     'muxnet_m': _cfg(
         url=''),
+    'muxnet_l': _cfg(
+        url='https://www.zhichaolu.com/assets/muxconv/pretrained/imagenet/muxnet_l.init'),
 }
 
 
@@ -913,30 +915,32 @@ def muxnet_m(pretrained=False, num_classes=1000, in_chans=3, **kwargs):
         channel_multiplier=1.0, depth_multiplier=1.0,
         num_classes=num_classes, in_chans=in_chans, **kwargs)
     model.default_cfg = default_cfg
-    if pretrained:
-        checkpoint_path = 'pretrained/muxnet_m.init'
-        load_checkpoint(model, checkpoint_path, use_ema=True)
+    # if pretrained:
+    #     checkpoint_path = 'pretrained/muxnet_m.init'
+    #     load_checkpoint(model, checkpoint_path, use_ema=True)
     return model
 
 
 @register_model
 def muxnet_l(pretrained=False, num_classes=1000, in_chans=3, **kwargs):
     """ MUXNet-l """
-    default_cfg = default_cfgs['msunet_s']
+    default_cfg = default_cfgs['muxnet_l']
     # NOTE for train, drop_rate should be 0.2
     kwargs['drop_connect_rate'] = 0.15  # set when training, TODO add as cmd arg
     model = _gen_muxnet_l(
         channel_multiplier=1.0, depth_multiplier=1.0,
         num_classes=num_classes, in_chans=in_chans, **kwargs)
     model.default_cfg = default_cfg
-    if pretrained:
-        load_pretrained(model, default_cfg, num_classes, in_chans)
+    # if pretrained:
+    #     load_pretrained(model, default_cfg, num_classes, in_chans)
     return model
 
 
 def factory(name, **kwargs):
     if name == 'muxnet_m':
         return muxnet_m(**kwargs)
+    elif name == 'muxnet_l':
+        return muxnet_l(**kwargs)
     else:
         raise NotImplementedError("Unknown model requested")
 
