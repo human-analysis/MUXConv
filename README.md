@@ -21,7 +21,7 @@ torchprofile >= 0.0.1 (optional for calculating FLOPs)
 ![imagenet](https://www.zhichaolu.com/images/2020-cvpr-muxnet-cifar.png)
 
 ## Pretrained models
-The easiest way to get started is to evaluate our pretrained MUXNet models. Pretrained models are available from [Google Drive](https://drive.google.com/drive/folders/1E00PbnqS69bksriH7tJKyqTxYsb07OhS?usp=sharing). 
+The easiest way to get started is to evaluate our pretrained MUXNet models. Pretrained models are available from [Google Drive](https://drive.google.com/drive/folders/1rgKxH4juIDQ7MX5U3XAUI5_aGvTJKoqd?usp=sharing). 
 ``` shell
 python eval.py --dataset [imagenet/cifar10/cifar100] \
 	       --data /path/to/dataset --batch-size 128 \
